@@ -1,0 +1,6 @@
+{
+  "name": "Giải Mã Tri Thức GDCD 7 – THCS Tân Hải",
+  "description": "Trò chơi kiểm tra trực tuyến môn Giáo dục công dân 7 - Trường THCS Tân Hải. Học mà chơi – Chơi mà học.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
