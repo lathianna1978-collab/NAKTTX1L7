@@ -18,6 +18,8 @@ import {
   Cloud,
   FileSpreadsheet,
   Upload,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { api, getCloudWebhookUrl, setCloudWebhookUrl, saveLocalSessions, getLocalSessions } from '../services/api';
 
@@ -34,7 +36,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   onResetStudentAttempt,
   onRefresh,
 }) => {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(true);
   const [password, setPassword] = useState('');
   const [authError, setAuthError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -236,6 +238,103 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
         alert(`Đã hủy khóa bài thi cho học sinh ${fullName}. Học sinh có thể đăng nhập làm lại.`);
         setViewingStudent(null);
       }
+    }
+  };
+
+  const [copiedScript, setCopiedScript] = useState(false);
+  const [isTestingWebhook, setIsTestingWebhook] = useState(false);
+
+  const googleAppsScriptCode = `function doPost(e) {
+  try {
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+    if (sheet.getLastRow() === 0) {
+      sheet.appendRow([
+        "Thời điểm nộp", "Họ và tên học sinh", "Lớp", "Mã đề thi", 
+        "Điểm số (thang 10)", "Số câu đúng", "Số câu sai", "Số câu bỏ trống", 
+        "Danh hiệu", "Bắt đầu lúc", "Thời gian làm (phút)"
+      ]);
+    }
+    var data = JSON.parse(e.postData.contents);
+    sheet.appendRow([
+      data.submittedAt || new Date().toLocaleString("vi-VN"),
+      data.studentName,
+      data.studentClass,
+      data.examCode,
+      data.score,
+      data.correctCount,
+      data.wrongCount,
+      data.blankCount,
+      data.rankTitle,
+      data.startedAt,
+      data.durationMinutes
+    ]);
+    return ContentService.createTextOutput(JSON.stringify({ status: "success" }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch(err) {
+    return ContentService.createTextOutput(JSON.stringify({ status: "error", error: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+function doGet(e) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var rows = sheet.getDataRange().getValues();
+  var list = [];
+  for (var i = 1; i < rows.length; i++) {
+    var r = rows[i];
+    list.push({
+      fullName: r[1],
+      studentClass: r[2],
+      examCode: r[3],
+      score: Number(r[4]),
+      correctCount: Number(r[5]),
+      wrongCount: Number(r[6]),
+      blankCount: Number(r[7]),
+      rankTitle: r[8],
+      status: "da_nop"
+    });
+  }
+  return ContentService.createTextOutput(JSON.stringify({ sessions: list }))
+    .setMimeType(ContentService.MimeType.JSON);
+}`;
+
+  const handleCopyScript = () => {
+    navigator.clipboard.writeText(googleAppsScriptCode);
+    setCopiedScript(true);
+    setTimeout(() => setCopiedScript(false), 2500);
+  };
+
+  const handleTestWebhook = async () => {
+    if (!cloudWebhookInput.trim()) {
+      alert('Vui lòng dán URL Google Apps Script / Webhook trước khi thử nghiệm.');
+      return;
+    }
+    setIsTestingWebhook(true);
+    try {
+      await fetch(cloudWebhookInput.trim(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          timestamp: new Date().toISOString(),
+          studentName: 'HỌC SINH THỬ NGHIỆM',
+          studentClass: '7A10',
+          examCode: 'MÃ ĐỀ 701',
+          score: 10.0,
+          correctCount: 20,
+          wrongCount: 0,
+          blankCount: 0,
+          rankTitle: 'SIÊU SAO TRI THỨC',
+          startedAt: new Date().toLocaleString('vi-VN'),
+          submittedAt: new Date().toLocaleString('vi-VN'),
+          durationMinutes: '15.0',
+        }),
+        mode: 'no-cors',
+      });
+      setCloudSaveMsg('✅ Đã gửi dữ liệu mẫu thành công! Hãy mở Google Sheet kiểm tra hàng dữ liệu mới.');
+    } catch (err) {
+      alert('Không thể kết nối tới Webhook: ' + String(err));
+    } finally {
+      setIsTestingWebhook(false);
     }
   };
 
@@ -609,17 +708,40 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               </div>
 
               <div className="space-y-4 text-xs text-slate-700">
-                <div className="bg-sky-50 border border-sky-200 rounded-2xl p-4">
-                  <p className="font-bold text-sky-950 mb-1">Cách thức hoạt động:</p>
-                  <p className="leading-relaxed text-sky-900">
-                    Khi học sinh làm bài trên điện thoại hoặc máy tính cá nhân ở nhà qua đường link Netlify,
-                    hệ thống sẽ <strong>tự động lưu bài làm</strong> vào máy chủ và gửi dữ liệu ngay lập tức tới URL Webhook của Thầy/Cô (ví dụ: Google Sheets Web App, Google Forms hoặc Server).
+                <div className="bg-sky-50 border-2 border-sky-200 rounded-2xl p-4">
+                  <p className="font-black text-sky-950 mb-1.5 flex items-center gap-1.5 text-xs">
+                    <Cloud className="w-4 h-4 text-sky-600" />
+                    <span>GIẢI PHÁP ĐỒNG BỘ DỮ LIỆU TỰ ĐỘNG KHI CHIA SẺ QUA NETLIFY:</span>
                   </p>
+                  <p className="leading-relaxed text-sky-900 font-medium">
+                    Do Netlify chỉ phục vụ tệp tĩnh, để toàn bộ học sinh làm bài trên điện thoại/máy tính cá nhân tại nhà tự động gửi điểm về máy Thầy/Cô, Thầy/Cô có thể liên kết trực tiếp với <strong>Google Trang tính (Google Sheets)</strong> hoàn toàn miễn phí và không giới hạn lượt làm!
+                  </p>
+                </div>
+
+                {/* 3 Step Guide */}
+                <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-2">
+                  <div className="font-bold text-slate-900">Hướng dẫn cài đặt Google Sheets trong 1 phút:</div>
+                  <ol className="list-decimal list-inside space-y-1 text-slate-600 text-[11px] font-medium leading-relaxed">
+                    <li>Mở một Google Trang tính mới trên Google Drive của Thầy/Cô.</li>
+                    <li>Vào menu <strong>Tiện ích mở rộng ➔ Apps Script</strong>.</li>
+                    <li>Xóa mã cũ, dán đoạn mã bên dưới rồi nhấn <strong>Triển khai ➔ Triển khai mới ➔ Ứng dụng web</strong> (chọn quyền truy cập: <em>Bất kỳ ai</em>).</li>
+                    <li>Sao chép URL ứng dụng web và dán vào ô bên dưới.</li>
+                  </ol>
+                  <div className="pt-1">
+                    <button
+                      type="button"
+                      onClick={handleCopyScript}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-sm transition-all cursor-pointer"
+                    >
+                      {copiedScript ? <Check className="w-4 h-4 text-emerald-300" /> : <Copy className="w-4 h-4" />}
+                      <span>{copiedScript ? 'Đã sao chép mã Apps Script!' : 'Sao chép mã Google Apps Script mẫu'}</span>
+                    </button>
+                  </div>
                 </div>
 
                 <div>
                   <label className="block font-bold text-slate-800 mb-1">
-                    URL Google Apps Script / Webhook (Tùy chọn):
+                    URL Google Apps Script Web App (Webhook):
                   </label>
                   <input
                     type="url"
@@ -629,29 +751,40 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border-2 border-slate-200 text-slate-900 font-mono text-xs outline-none focus:border-blue-500 focus:bg-white"
                   />
                   <p className="text-[11px] text-slate-500 mt-1">
-                    * Nếu để trống, dữ liệu vẫn được lưu trữ tự động trên máy chủ và bộ nhớ trình duyệt, có thể xuất Excel (CSV) bất cứ lúc nào.
+                    * Khi điền URL, bất cứ khi nào học sinh nộp bài thì kết quả (tên, lớp, điểm, đúng/sai, thời gian) sẽ tự động ghi vào Google Trang tính ngay lập tức.
                   </p>
                 </div>
 
                 {cloudSaveMsg && (
-                  <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-800 font-bold text-center">
+                  <div className="p-3 rounded-xl bg-emerald-50 border-2 border-emerald-300 text-emerald-800 font-bold text-center text-xs">
                     {cloudSaveMsg}
                   </div>
                 )}
 
-                <div className="flex justify-end gap-2 pt-2">
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100">
                   <button
-                    onClick={() => setShowCloudConfig(false)}
-                    className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold"
+                    type="button"
+                    onClick={handleTestWebhook}
+                    disabled={isTestingWebhook || !cloudWebhookInput.trim()}
+                    className="px-4 py-2 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold disabled:opacity-50 transition-all cursor-pointer"
                   >
-                    Đóng
+                    {isTestingWebhook ? 'Đang gửi thử...' : '⚡ Thử nghiệm gửi dữ liệu mẫu'}
                   </button>
-                  <button
-                    onClick={handleSaveWebhook}
-                    className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold shadow-md shadow-blue-600/30"
-                  >
-                    Lưu Cấu Hình
-                  </button>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setShowCloudConfig(false)}
+                      className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold cursor-pointer"
+                    >
+                      Đóng
+                    </button>
+                    <button
+                      onClick={handleSaveWebhook}
+                      className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold shadow-md shadow-blue-600/30 cursor-pointer"
+                    >
+                      Lưu Cấu Hình
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

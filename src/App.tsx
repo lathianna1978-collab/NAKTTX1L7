@@ -11,6 +11,7 @@ import { Certificate } from './components/Certificate';
 import { TeacherDashboard } from './components/TeacherDashboard';
 import { soundManager } from './utils/sound';
 import { api, getLocalActiveId } from './services/api';
+import { subscribeToSubmissions, testFirestoreConnection } from './services/firebase';
 import confetti from 'canvas-confetti';
 
 export default function App() {
@@ -29,7 +30,17 @@ export default function App() {
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Load initial session on startup
+  // Refresh all student submissions from server / local storage
+  const refreshAllSubmissions = useCallback(async () => {
+    try {
+      const list = await api.getTeacherSubmissions();
+      setAllTeacherSessions(list);
+    } catch (err) {
+      console.error('Failed to load submissions:', err);
+    }
+  }, []);
+
+  // Load initial session on startup and fetch student submissions list
   useEffect(() => {
     async function init() {
       setIsLoading(true);
@@ -47,10 +58,42 @@ export default function App() {
           }
         }
       }
+      testFirestoreConnection();
+      await refreshAllSubmissions();
       setIsLoading(false);
     }
     init();
-  }, []);
+
+    // 1. Real-time Firestore Subscription (instant updates across all devices & Netlify!)
+    const unsubscribeFirestore = subscribeToSubmissions((cloudList) => {
+      if (cloudList && cloudList.length > 0) {
+        setAllTeacherSessions((prev) => {
+          const map = new Map<string, StudentSession>();
+          prev.forEach((s) => map.set(s.studentId || `${s.fullName}_${s.studentClass}`, s));
+          cloudList.forEach((s) => map.set(s.studentId || `${s.fullName}_${s.studentClass}`, s));
+          return Array.from(map.values());
+        });
+      }
+    });
+
+    // 2. Auto-refresh submissions every 4s
+    const interval = setInterval(refreshAllSubmissions, 4000);
+
+    // 3. Instant update whenever any tab/window records a submission
+    const handleStorageChange = () => {
+      refreshAllSubmissions();
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('tanhai_sessions_updated', handleStorageChange);
+
+    return () => {
+      unsubscribeFirestore();
+      clearInterval(interval);
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('tanhai_sessions_updated', handleStorageChange);
+    };
+  }, [refreshAllSubmissions]);
 
   // Handle finalize test
   const handleFinalizeExam = useCallback(async () => {
@@ -59,12 +102,13 @@ export default function App() {
     try {
       const finalized = await api.finalizeSession(session.studentId);
       setSession(finalized);
+      await refreshAllSubmissions();
     } catch (err) {
       console.error('Finalize error:', err);
     } finally {
       setIsQuestionLocked(false);
     }
-  }, [session]);
+  }, [session, refreshAllSubmissions]);
 
   // Main Timer Effect during active exam
   useEffect(() => {
@@ -276,6 +320,7 @@ export default function App() {
         onToggleSound={handleToggleSound}
         onOpenTeacher={handleOpenTeacher}
         onViewCertificate={session?.status === 'da_nop' ? () => setShowCertificateOnly(true) : undefined}
+        completedCount={allTeacherSessions.filter((s) => s.status === 'da_nop').length}
       />
 
       {/* Main Container */}
@@ -297,6 +342,8 @@ export default function App() {
           <LoginModal
             onStartSession={handleStartSession}
             onViewCompleted={() => setShowCertificateOnly(true)}
+            allSessions={allTeacherSessions}
+            onRefreshAll={refreshAllSubmissions}
           />
         ) : session.status === 'da_nop' ? (
           // COMPLETED RESULT VIEW
@@ -307,6 +354,8 @@ export default function App() {
               setShowCertificateOnly(false);
             }}
             onOpenTeacher={handleOpenTeacher}
+            allSessions={allTeacherSessions}
+            onRefreshAll={refreshAllSubmissions}
           />
         ) : (
           // ACTIVE EXAM VIEW (3 STAGES)

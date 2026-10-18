@@ -1,5 +1,5 @@
 import React from 'react';
-import { Volume2, VolumeX, ShieldCheck, GraduationCap, Award } from 'lucide-react';
+import { Volume2, VolumeX, ShieldCheck, GraduationCap, Award, Users } from 'lucide-react';
 import { StudentSession } from '../types';
 
 interface HeaderProps {
@@ -8,6 +8,7 @@ interface HeaderProps {
   onToggleSound: () => void;
   onOpenTeacher: () => void;
   onViewCertificate?: () => void;
+  completedCount?: number;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -16,6 +17,7 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleSound,
   onOpenTeacher,
   onViewCertificate,
+  completedCount,
 }) => {
   return (
     <header className="sticky top-0 z-40 w-full bg-white/95 backdrop-blur-md border-b border-blue-100 shadow-sm">
@@ -96,13 +98,14 @@ export const Header: React.FC<HeaderProps> = ({
             {isMuted ? <VolumeX className="w-4 h-4 text-rose-500" /> : <Volume2 className="w-4 h-4 text-blue-600" />}
           </button>
 
-          {/* Teacher Portal Button */}
+          {/* Teacher Portal & Summary Table Button */}
           <button
             onClick={onOpenTeacher}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 shadow-sm transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow-md shadow-blue-600/25 transition-all cursor-pointer"
+            title="Xem danh sách học sinh đã hoàn thành bài kiểm tra theo lớp (A-Z)"
           >
-            <ShieldCheck className="w-4 h-4 text-indigo-600" />
-            <span className="hidden sm:inline">Giáo viên</span>
+            <Users className="w-4 h-4 text-amber-300 shrink-0" />
+            <span className="whitespace-nowrap font-bold">Danh Sách ({completedCount ?? 0})</span>
           </button>
         </div>
       </div>

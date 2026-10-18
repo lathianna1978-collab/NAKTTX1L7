@@ -1,0 +1,34 @@
+{
+  "entities": {
+    "StudentSubmission": {
+      "title": "StudentSubmission",
+      "description": "Ket qua bai kiem tra ca nhan GDCD 7 cua hoc sinh THCS Tan Hai",
+      "type": "object",
+      "properties": {
+        "studentId": { "type": "string" },
+        "fullName": { "type": "string" },
+        "studentClass": { "type": "string" },
+        "examCode": { "type": "string" },
+        "score": { "type": "number" },
+        "correctCount": { "type": "number" },
+        "wrongCount": { "type": "number" },
+        "blankCount": { "type": "number" },
+        "rankTitle": { "type": "string" },
+        "rankMessage": { "type": "string" },
+        "status": { "type": "string" },
+        "startedAt": { "type": "number" },
+        "submittedAt": { "type": "number" },
+        "totalTimeLimitSeconds": { "type": "number" },
+        "questionTimeLimitSeconds": { "type": "number" },
+        "currentQuestionIndex": { "type": "number" }
+      },
+      "required": ["studentId", "fullName", "studentClass", "status"]
+    }
+  },
+  "firestore": {
+    "/submissions/{submissionId}": {
+      "schema": { "$ref": "#/entities/StudentSubmission" },
+      "description": "Danh sach tat ca bai lam va diem so cua hoc sinh"
+    }
+  }
+}

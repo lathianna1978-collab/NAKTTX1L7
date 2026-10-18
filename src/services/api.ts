@@ -1,5 +1,6 @@
 import { StudentSession, StudentAnswer, StudentClass, Question } from '../types';
 import { MASTER_QUESTIONS, getRankInfo, isFillBlankCorrect, isMatchingCorrect, isOrderingCorrect, getCustomShuffledQuestions } from '../data/questions';
+import { saveSubmissionToFirestore, getAllSubmissionsFromFirestore } from './firebase';
 
 const LOCAL_STORAGE_KEY = 'tanhai_gdcd7_sessions';
 const ACTIVE_SESSION_ID_KEY = 'tanhai_gdcd7_active_id';
@@ -66,6 +67,9 @@ export function getLocalSessions(): StudentSession[] {
 export function saveLocalSessions(sessions: StudentSession[]) {
   try {
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(sessions));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tanhai_sessions_updated', { detail: sessions }));
+    }
   } catch (err) {
     console.error('LocalStorage write error:', err);
   }
@@ -201,6 +205,26 @@ export const api = {
       // Offline fallback
     }
 
+    // Check Firestore Cloud Database
+    try {
+      const cloudSessions = await getAllSubmissionsFromFirestore();
+      const cloudFound = cloudSessions.find(
+        (s) =>
+          (studentId && s.studentId === studentId) ||
+          (fullName && studentClass && s.fullName.toLowerCase() === fullName.toLowerCase() && s.studentClass === studentClass)
+      );
+      if (cloudFound) {
+        const localList = getLocalSessions();
+        const idx = localList.findIndex((s) => s.studentId === cloudFound.studentId);
+        if (idx !== -1) localList[idx] = cloudFound;
+        else localList.push(cloudFound);
+        saveLocalSessions(localList);
+        return cloudFound;
+      }
+    } catch {
+      // Ignore
+    }
+
     // Fallback to local
     const local = getLocalSessions();
     return (
@@ -318,7 +342,8 @@ export const api = {
         if (idx !== -1) local[idx] = data.session;
         else local.push(data.session);
         saveLocalSessions(local);
-        // Automatically sync to cloud webhook if configured
+        // Automatically sync to Firestore & Cloud Webhook
+        saveSubmissionToFirestore(data.session);
         pushToCloudWebhook(data.session);
         return data.session;
       }
@@ -332,7 +357,8 @@ export const api = {
       const graded = localGradeSession(local[idx]);
       local[idx] = graded;
       saveLocalSessions(local);
-      // Automatically sync to cloud webhook if configured
+      // Automatically sync to Firestore & Cloud Webhook
+      saveSubmissionToFirestore(graded);
       pushToCloudWebhook(graded);
       return graded;
     }
@@ -340,21 +366,64 @@ export const api = {
     throw new Error('Session not found');
   },
 
-  // Get all submissions for teacher
+  // Get all submissions for teacher and students
   async getTeacherSubmissions(): Promise<StudentSession[]> {
+    const map = new Map<string, StudentSession>();
+    const local = getLocalSessions();
+    local.forEach((s) => map.set(s.studentId || `${s.fullName}_${s.studentClass}`, s));
+
+    // 1. Fetch from Firestore Cloud Database (syncs all devices and Netlify!)
+    try {
+      const firestoreList = await getAllSubmissionsFromFirestore();
+      firestoreList.forEach((s) => {
+        const key = s.studentId || `${s.fullName}_${s.studentClass}`;
+        if (!map.has(key) || s.status === 'da_nop') {
+          map.set(key, s);
+        }
+      });
+    } catch (err) {
+      console.warn('Firestore fetch notice:', err);
+    }
+
+    // 2. Try fetching from Node backend server (if running)
     try {
       const res = await fetch('/api/teacher/submissions');
       if (res.ok) {
         const data = await res.json();
-        if (data.sessions && data.sessions.length > 0) {
-          saveLocalSessions(data.sessions);
-          return data.sessions;
+        if (Array.isArray(data.sessions)) {
+          data.sessions.forEach((s: StudentSession) => map.set(s.studentId || `${s.fullName}_${s.studentClass}`, s));
         }
       }
     } catch {
-      // Fallback to local
+      // Backend not running (e.g. Netlify static mode)
     }
-    return getLocalSessions();
+
+    // 3. Try fetching from Cloud Sync Webhook (e.g. Google Sheet doGet or Cloud DB)
+    const webhookUrl = getCloudWebhookUrl();
+    if (webhookUrl) {
+      try {
+        const cloudRes = await fetch(webhookUrl);
+        if (cloudRes.ok) {
+          const cloudData = await cloudRes.json();
+          if (Array.isArray(cloudData.sessions)) {
+            cloudData.sessions.forEach((s: StudentSession) => {
+              if (s.fullName && s.studentClass) {
+                const key = s.studentId || `${s.fullName}_${s.studentClass}`;
+                if (!map.has(key) || s.status === 'da_nop') {
+                  map.set(key, s);
+                }
+              }
+            });
+          }
+        }
+      } catch {
+        // Handled silently
+      }
+    }
+
+    const merged = Array.from(map.values());
+    saveLocalSessions(merged);
+    return merged;
   },
 
   // Reset student attempt

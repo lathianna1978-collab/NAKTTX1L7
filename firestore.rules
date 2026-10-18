@@ -1,0 +1,18 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /submissions/{submissionId} {
+      allow read: if true;
+      allow create: if request.resource.data.fullName is string
+                    && request.resource.data.studentClass is string
+                    && request.resource.data.studentId is string;
+      allow update: if request.resource.data.fullName is string
+                    && request.resource.data.studentClass is string;
+      allow delete: if false;
+    }
+
+    match /test/connection {
+      allow read, write: if true;
+    }
+  }
+}

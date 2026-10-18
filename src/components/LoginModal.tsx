@@ -1,20 +1,26 @@
 import React, { useState } from 'react';
 import { VALID_CLASSES, StudentClass, StudentSession } from '../types';
 import { Mascot } from './Mascot';
-import { User, School, ArrowRight, ShieldAlert, Award, Clock, Sparkles } from 'lucide-react';
+import { StudentSummaryTable } from './StudentSummaryTable';
+import { User, School, ArrowRight, ShieldAlert, Award, Clock, Sparkles, Users } from 'lucide-react';
 import { api } from '../services/api';
 
 interface LoginModalProps {
   onStartSession: (fullName: string, studentClass: StudentClass, studentId: string) => Promise<{ success: boolean; session?: StudentSession; message?: string }>;
   existingCompletedSession?: StudentSession | null;
   onViewCompleted: () => void;
+  allSessions?: StudentSession[];
+  onRefreshAll?: () => Promise<void>;
 }
 
 export const LoginModal: React.FC<LoginModalProps> = ({
   onStartSession,
   existingCompletedSession,
   onViewCompleted,
+  allSessions = [],
+  onRefreshAll,
 }) => {
+  const [activeTab, setActiveTab] = useState<'login' | 'submissions'>('login');
   const [fullName, setFullName] = useState('');
   const [studentClass, setStudentClass] = useState<StudentClass>('7A10');
   const [step, setStep] = useState<'input' | 'confirm'>('input');
@@ -73,6 +79,16 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           >
             Học sinh khác đăng nhập
           </button>
+        </div>
+
+        {/* BẢNG TỔNG HỢP DANH SÁCH HỌC SINH */}
+        <div className="mt-8 pt-6 border-t-2 border-slate-100 text-left">
+          <StudentSummaryTable
+            sessions={allSessions.length > 0 ? allSessions : [completedStudent]}
+            onRefresh={onRefreshAll}
+            title="BẢNG TỔNG HỢP DANH SÁCH HỌC SINH ĐÃ THAM GIA LÀM BÀI (XẾP A – Z)"
+            showExport={true}
+          />
         </div>
       </div>
     );
@@ -137,9 +153,50 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     }
   };
 
+  const submittedCount = allSessions.filter((s) => s.status === 'da_nop').length;
+
   return (
-    <div className="w-full max-w-2xl mx-auto my-6 sm:my-10 px-4">
-      <div className="bg-white/95 border-2 border-blue-200 rounded-3xl p-6 sm:p-10 shadow-2xl backdrop-blur-xl relative overflow-hidden">
+    <div className="w-full max-w-5xl mx-auto my-4 sm:my-8 px-4 space-y-8">
+      {/* Quick Navigation and Live Status Indicator */}
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-white/80 backdrop-blur-md border-2 border-blue-200 p-3 sm:p-4 rounded-2xl shadow-sm">
+        <div className="flex items-center gap-2">
+          <span className="relative flex h-3 w-3">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+          </span>
+          <span className="text-xs font-black text-slate-800">
+            HỆ THỐNG ĐANG TỰ ĐỘNG CẬP NHẬT TRỰC TIẾP
+          </span>
+          <span className="text-[11px] font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full">
+            {submittedCount} học sinh đã nộp bài
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-black bg-blue-600 text-white shadow-sm hover:bg-blue-500 transition-all cursor-pointer"
+          >
+            <span>✍️ Đăng Nhập Làm Bài</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              document.getElementById('bang-danh-sach-nop-bai')?.scrollIntoView({ behavior: 'smooth' });
+            }}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-black bg-amber-400 text-slate-950 shadow-sm hover:bg-amber-300 transition-all cursor-pointer"
+          >
+            <Users className="w-4 h-4 text-slate-950" />
+            <span>Xem Bảng Điểm Bên Dưới ({submittedCount})</span>
+          </button>
+        </div>
+      </div>
+
+      {/* LOGIN CARD */}
+      <div className="max-w-2xl mx-auto bg-white/95 border-2 border-blue-200 rounded-3xl p-6 sm:p-10 shadow-2xl backdrop-blur-xl relative overflow-hidden">
         {/* Subtle Decorative top light */}
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-96 h-32 bg-blue-400/10 rounded-full blur-3xl pointer-events-none" />
 
@@ -293,6 +350,16 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             </div>
           </div>
         )}
+      </div>
+
+      {/* BẢNG TỔNG HỢP DANH SÁCH HỌC SINH ĐÃ THAM GIA LÀM BÀI (LUÔN HIỂN THỊ VÀ TỰ ĐỘNG CẬP NHẬT) */}
+      <div id="bang-danh-sach-nop-bai" className="pt-2">
+        <StudentSummaryTable
+          sessions={allSessions}
+          onRefresh={onRefreshAll}
+          title="BẢNG TỔNG HỢP DANH SÁCH HỌC SINH ĐÃ THAM GIA LÀM BÀI (XẾP A – Z)"
+          showExport={true}
+        />
       </div>
     </div>
   );

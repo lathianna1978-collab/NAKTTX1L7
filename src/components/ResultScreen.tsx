@@ -3,17 +3,26 @@ import { StudentSession } from '../types';
 import { getRankInfo } from '../data/questions';
 import { Mascot } from './Mascot';
 import { Certificate } from './Certificate';
+import { StudentSummaryTable } from './StudentSummaryTable';
 import { soundManager } from '../utils/sound';
-import { Award, CheckCircle, XCircle, MinusCircle, Clock, ShieldCheck, Sparkles, Home, Lock } from 'lucide-react';
+import { Award, CheckCircle, XCircle, MinusCircle, Clock, ShieldCheck, Sparkles, Home, Lock, Users } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 interface ResultScreenProps {
   session: StudentSession;
   onGoHome: () => void;
   onOpenTeacher?: () => void;
+  allSessions?: StudentSession[];
+  onRefreshAll?: () => Promise<void>;
 }
 
-export const ResultScreen: React.FC<ResultScreenProps> = ({ session, onGoHome, onOpenTeacher }) => {
+export const ResultScreen: React.FC<ResultScreenProps> = ({
+  session,
+  onGoHome,
+  onOpenTeacher,
+  allSessions = [],
+  onRefreshAll,
+}) => {
   const [showCertificate, setShowCertificate] = useState(false);
   const score = session.score ?? 0;
   const rankInfo = getRankInfo(score);
@@ -197,6 +206,16 @@ export const ResultScreen: React.FC<ResultScreenProps> = ({ session, onGoHome, o
           <p className="text-[11px] text-slate-600 mt-1 font-medium">
             Học sinh không được phép làm lại để tránh chỉnh sửa điểm. Mọi câu hỏi đã được bảo mật để đảm bảo công bằng cho toàn khối 7 Trường THCS Tân Hải.
           </p>
+        </div>
+
+        {/* BẢNG TỔNG KẾT HỌC SINH ĐÃ LÀM BÀI ĐỂ GIÁO VIÊN KIỂM TRA NGAY */}
+        <div className="mt-10 pt-8 border-t-2 border-slate-100 text-left">
+          <StudentSummaryTable
+            sessions={allSessions.length > 0 ? allSessions : [session]}
+            onRefresh={onRefreshAll}
+            title="BẢNG TỔNG HỢP DANH SÁCH HỌC SINH ĐÃ THAM GIA LÀM BÀI (XẾP A – Z)"
+            showExport={true}
+          />
         </div>
       </div>
     </div>
